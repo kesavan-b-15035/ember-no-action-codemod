@@ -3,7 +3,13 @@ const Component = {
   actions: {
     method() {},
     anotherMethod(param) {},
-    expr: function() {},
-    test: function() {}
+    expr: function() {
+      let obj = {};
+      let val = {...obj};
+      return val;
+    },
+    test: function() {},
+    async asyncMethod() {},
+    asyncProp: async function() {}
   }
 };

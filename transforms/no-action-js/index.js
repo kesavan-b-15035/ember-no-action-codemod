@@ -105,7 +105,7 @@ module.exports = function transformer(file, api) {
     .find(j.ObjectExpression)
     .forEach((path) => {
       const properties = path.node.properties;
-      const existingKeys = new Set(properties.map((prop) => prop.key.name));
+      const existingKeys = new Set(properties.map((prop) => prop.key?.name).filter(Boolean));
 
       for (let i = properties.length - 1; i >= 0; i--) {
         const property = properties[i];
@@ -115,19 +115,20 @@ module.exports = function transformer(file, api) {
           hbsActions.includes(property.key.name) &&
           property.key.name !== 'actions'
         ){
+          const functionExpression = j.functionExpression(
+            null,            
+            property.params,   
+            property.body
+          );
+          // Set async and generator properties after creation
+          functionExpression.async = property.async;
+          functionExpression.generator = property.generator;
+          
           const newProperty = j.objectProperty(
             j.identifier(property.key.name),
             j.callExpression(
               j.identifier('action'),
-              [
-                j.functionExpression(
-                  null,            
-                  property.params,   
-                  property.body,     
-                  property.generator,
-                  property.async
-                )
-              ]
+              [functionExpression]
             )
           );
     
@@ -159,6 +160,9 @@ module.exports = function transformer(file, api) {
                 actionProperty.params,
                 actionProperty.body
               );
+              // Set async and generator properties after creation
+              functionExpression.async = actionProperty.async;
+              functionExpression.generator = actionProperty.generator;
 
               return j.objectProperty(
                 j.identifier(keyName),
