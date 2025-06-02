@@ -5,12 +5,15 @@ const path = require('path');
 
 // === NEW HELPER FUNCTION ===
 function getActionsFromHBS(jsFilePath) {
-  const hbsFilePath = jsFilePath
-    .replace('/components/', '/templates/components/')
+  let hbsFilePath = jsFilePath
     .replace('.js', '.hbs');
 
+
+  if (!fs.existsSync(hbsFilePath)) {
+    hbsFilePath = hbsFilePath.replace('/components/', '/templates/components/');
   if (!fs.existsSync(hbsFilePath)) {
     return [];
+  }
   }
 
   const hbsContent = fs.readFileSync(hbsFilePath, 'utf8');
