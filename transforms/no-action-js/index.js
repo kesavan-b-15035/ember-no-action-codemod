@@ -11,9 +11,9 @@ function getActionsFromHBS(jsFilePath) {
 
   if (!fs.existsSync(hbsFilePath)) {
     hbsFilePath = hbsFilePath.replace('/components/', '/templates/components/');
-  if (!fs.existsSync(hbsFilePath)) {
-    return [];
-  }
+    if (!fs.existsSync(hbsFilePath)) {
+      return [];
+    }
   }
 
   const hbsContent = fs.readFileSync(hbsFilePath, 'utf8');
@@ -69,6 +69,9 @@ module.exports = function transformer(file, api) {
           property.value.type === 'ObjectExpression'
         ) {
           shouldAddImport = true;
+        } else if (hbsActions.length && hbsActions.includes(property.key?.name)) {
+          // If any action method is found, we need to add the import
+          shouldAddImport = true;
         }
       }
     });
@@ -84,7 +87,7 @@ module.exports = function transformer(file, api) {
       } else {
         // Add a new import declaration for `action` at the end of other imports
         const lastImportIndex = root.find(j.ImportDeclaration).size() - 1;
-        
+
         let dec = j.importDeclaration(
           [j.importSpecifier(j.identifier('action'))],
           j.literal('@ember/object')
@@ -113,30 +116,49 @@ module.exports = function transformer(file, api) {
       for (let i = properties.length - 1; i >= 0; i--) {
         const property = properties[i];
 
-        if(
-          property?.type === 'ObjectMethod'  && 
+        if (
+          (property?.type === 'ObjectMethod' || property?.type === 'ObjectProperty') &&
           hbsActions.includes(property.key.name) &&
           property.key.name !== 'actions'
-        ){
-          const functionExpression = j.functionExpression(
-            null,            
-            property.params,   
-            property.body
-          );
-          // Set async and generator properties after creation
-          functionExpression.async = property.async;
-          functionExpression.generator = property.generator;
-          
-          const newProperty = j.objectProperty(
-            j.identifier(property.key.name),
-            j.callExpression(
-              j.identifier('action'),
-              [functionExpression]
-            )
-          );
-    
-          // Replace the method with the new property
-          properties.splice(i, 1, newProperty);
+        ) {
+          let newProperty;
+
+          if (property.type === 'ObjectMethod') {
+            const functionExpression = j.functionExpression(null, property.params, property.body);
+            // Set async and generator properties after creation
+            functionExpression.async = property.async;
+            functionExpression.generator = property.generator;
+
+            newProperty = j.objectProperty(
+              j.identifier(property.key.name),
+              j.callExpression(j.identifier('action'), [functionExpression])
+            );
+          } else if (property.type === 'ObjectProperty') {
+            // Handle ObjectProperty - check if value is a function and wrap with action if needed
+            if (
+              property.value &&
+              (property.value.type === 'FunctionExpression' ||
+                property.value.type === 'ArrowFunctionExpression')
+            ) {
+              // Check if it's already wrapped with action
+              const isAlreadyWrapped =
+                property.value.type === 'CallExpression' &&
+                property.value.callee &&
+                property.value.callee.name === 'action';
+
+              if (!isAlreadyWrapped) {
+                newProperty = j.objectProperty(
+                  j.identifier(property.key.name),
+                  j.callExpression(j.identifier('action'), [property.value])
+                );
+              }
+            }
+          }
+
+          if (newProperty) {
+            // Replace the method/property with the new property
+            properties.splice(i, 1, newProperty);
+          }
         }
 
         if (
