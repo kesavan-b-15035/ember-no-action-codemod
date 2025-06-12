@@ -1,6 +1,6 @@
 import { action } from "@ember/object";
 const Component = {
-  test: action(function() {}),
+  test() {},
   method: action(function() {}),
   anotherMethod: action(function(param) {}),
 

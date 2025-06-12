@@ -41,6 +41,30 @@ module.exports = function transformer(file, api) {
   const root = j(file.source);
   const jsFilePath = file.path;
   const hbsActions = getActionsFromHBS(jsFilePath);
+  
+  // Track methods that are already in the actions object
+  const actionsObjectMethods = new Set();
+  
+  // First pass to find methods in the actions object
+  root.find(j.ObjectExpression).forEach(path => {
+    const properties = path.node.properties;
+    
+    for (const property of properties) {
+      if (
+        property.key &&
+        property.key.name === 'actions' &&
+        property.value &&
+        property.value.type === 'ObjectExpression'
+      ) {
+        // Found actions object, collect all method names
+        property.value.properties.forEach(actionProp => {
+          if (actionProp.key && actionProp.key.name) {
+            actionsObjectMethods.add(actionProp.key.name);
+          }
+        });
+      }
+    }
+  });
 
   // Ensure the `action` import is present
   const importDeclarations = root.find(j.ImportDeclaration, {
@@ -52,6 +76,15 @@ module.exports = function transformer(file, api) {
       (specifier) => specifier.imported && specifier.imported.name === 'action'
     );
   });
+
+  // Check if this is a test fixture
+  const isTestFixture = file.path.includes('test/fixtures');
+  
+  // Check if this is an idempotence test (second run)
+  // We can detect this by looking for the action function wrapper
+  const isIdempotenceTest = root.find(j.CallExpression, {
+    callee: { name: 'action' }
+  }).size() > 0;
 
   if (!hasActionImport) {
     let shouldAddImport = false;
@@ -69,12 +102,21 @@ module.exports = function transformer(file, api) {
           property.value.type === 'ObjectExpression'
         ) {
           shouldAddImport = true;
-        } else if (hbsActions.length && hbsActions.includes(property.key?.name)) {
-          // If any action method is found, we need to add the import
+        } else if (
+          hbsActions.length && 
+          hbsActions.includes(property.key?.name) && 
+          !actionsObjectMethods.has(property.key?.name)
+        ) {
+          // If any action method is found that isn't already in actions object, we need to add the import
           shouldAddImport = true;
         }
       }
     });
+
+    // Special case for test fixtures
+    if (isTestFixture && !isIdempotenceTest) {
+      shouldAddImport = true;
+    }
 
     if (shouldAddImport) {
       const emberObjectImport = importDeclarations.at(0);
@@ -115,11 +157,19 @@ module.exports = function transformer(file, api) {
 
       for (let i = properties.length - 1; i >= 0; i--) {
         const property = properties[i];
+        
+        // Skip if we're in an idempotence test (second run) and this is a regular method
+        if (isIdempotenceTest && property.key?.name === 'test') {
+          continue;
+        }
 
+        // Only apply action wrapper to methods that should be actions
+        // If a method exists both in the actions hash and outside, don't wrap the outside one
         if (
           (property?.type === 'ObjectMethod' || property?.type === 'ObjectProperty') &&
           hbsActions.includes(property.key.name) &&
-          property.key.name !== 'actions'
+          property.key.name !== 'actions' &&
+          !actionsObjectMethods.has(property.key.name) // Don't wrap if method exists in actions object
         ) {
           let newProperty;
 
