@@ -26,9 +26,17 @@ module.exports = function ({ source /*, path*/ }, { parse, visit }) {
             return b.mustache(b.path(`this.${firstParam.value}`));
           } else if (secondParam) {
             // Transform {{action this.method param}} to {{fn this.method param}}
+            // Check if firstParam.original does not contain 'this.'
+            if (!node.params[0].original.includes('this.')) {
+              console.log('\nCheck this action '+node.params[0].original+' in JS file as it is from another instance');
+            }
             return b.mustache(b.path('fn'), node.params);
           } else {
             // Transform {{action this.method}} to {{this.method}}
+            // Check if firstParam.original does not contain 'this.'
+            if (!firstParam.original.includes('this.')) {
+              console.log('\nCheck this action '+firstParam.original+' in JS file as it is from another instance');
+            }
             return b.mustache(firstParam);
           }
         }
@@ -55,9 +63,17 @@ module.exports = function ({ source /*, path*/ }, { parse, visit }) {
             return b.path(`this.${firstParam.value}`);
           } else if (secondParam) {
             // Transform (action this.method param) to (fn this.method param)
+            // Check if firstParam.original does not contain 'this.'
+            if (!node.params[0].original.includes('this.')) {
+              console.log('\nCheck this action '+node.params[0].original+' in JS file as it is from another instance');
+            }
             return b.sexpr(b.path('fn'), node.params);
           } else {
             // Transform (action this.method) to this.method
+            // Check if firstParam.original does not contain 'this.'
+             if (!firstParam.original.includes('this.')) {
+              console.log('\nCheck this action '+firstParam.original+' in JS file as it is from another instance');
+            }
             return b.path(firstParam.original);
           }
         }
