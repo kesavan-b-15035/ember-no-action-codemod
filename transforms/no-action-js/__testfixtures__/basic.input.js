@@ -1,4 +1,5 @@
 const Component = {
+  test1() {},
   test() {},
   actions: {
     method() {},
@@ -8,7 +9,7 @@ const Component = {
       let val = {...obj};
       return val;
     },
-    test: function() {},
+    test() {},
     async asyncMethod() {},
     asyncProp: async function() {}
   }
