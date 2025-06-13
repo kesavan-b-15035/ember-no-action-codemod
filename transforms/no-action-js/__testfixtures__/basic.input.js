@@ -1,5 +1,5 @@
 const Component = {
-  test1() {},
+  methodUsedAsActionInHBS() {},
   test() {},
   actions: {
     method() {},

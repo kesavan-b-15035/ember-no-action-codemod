@@ -1,6 +1,6 @@
 import { action } from "@ember/object";
 const Component = {
-  test1: action(function() {}),
+  methodUsedAsActionInHBS: action(function() {}),
   test() {},
   method: action(function() {}),
   anotherMethod: action(function(param) {}),
@@ -11,7 +11,9 @@ const Component = {
     return val;
   }),
 
+  // FIXME: This method was renamed from 'test' to 'testAction' due to naming conflict. Update corresponding HBS templates.
   testAction: action(function() {}),
+
   asyncMethod: action(async function() {}),
   asyncProp: action(async function() {})
 };

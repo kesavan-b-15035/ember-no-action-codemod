@@ -41,20 +41,24 @@ module.exports = function transformer(file, api) {
   const root = j(file.source);
   const jsFilePath = file.path;
   const hbsActions = getActionsFromHBS(jsFilePath);
-  
+
   // Check if this is an idempotence test (second run)
   // We can detect this by looking for the action function wrapper
   const isIdempotenceTest = root.find(j.CallExpression, {
     callee: { name: 'action' }
   }).size() > 0;
-  
+
   // Track methods that are already in the actions object
   const actionsObjectMethods = new Set();
-  
+
+  // Track renamed methods for creating TODOs
+  const renamedMethods = [];
+
+
   // First pass to find methods in the actions object
   root.find(j.ObjectExpression).forEach(path => {
     const properties = path.node.properties;
-    
+
     for (const property of properties) {
       // Case 1: It's an actions object - collect all method names inside it
       if (
@@ -68,12 +72,12 @@ module.exports = function transformer(file, api) {
             actionsObjectMethods.add(actionProp.key.name);
           }
         });
-      } 
+      }
       // Case 2: It's an already processed method with "Action" suffix during second run
       else if (
-        isIdempotenceTest && 
-        property.key && 
-        property.key.name && 
+        isIdempotenceTest &&
+        property.key &&
+        property.key.name &&
         property.key.name.endsWith('Action')
       ) {
         const originalMethodName = property.key.name.replace(/Action$/, '');
@@ -216,6 +220,18 @@ module.exports = function transformer(file, api) {
 
             if (existingKeys.has(keyName)) {
               console.log("[WARNING]: This method "+ keyName + " exists inside of the actions object as well as present in outside of the actions object. It has been renamed to "+keyName+"Action avoid conflicts. Makesure to check names in both JS & hbs file.");
+
+              // Track renamed methods for later TODO generation
+              renamedMethods.push({
+                originalName: keyName,
+                newName: `${keyName}Action`
+              });
+
+              // Add a TODO comment above the method to help track renamed methods
+              const todoComment = j.commentLine(` FIXME: This method was renamed from '${keyName}' to '${keyName}Action' due to naming conflict. Update corresponding HBS templates.`, true, false);
+              actionProperty.comments = actionProperty.comments || [];
+              actionProperty.comments.push(todoComment);
+
               keyName = `${keyName}Action`;
             }
 
@@ -232,20 +248,32 @@ module.exports = function transformer(file, api) {
               functionExpression.async = actionProperty.async;
               functionExpression.generator = actionProperty.generator;
 
-              return j.objectProperty(
+              const newProperty = j.objectProperty(
                 j.identifier(keyName),
                 j.callExpression(j.identifier('action'), [functionExpression])
               );
+
+              if (actionProperty.comments) {
+                newProperty.comments = actionProperty.comments;
+              }
+
+              return newProperty;
             } else if (
               actionProperty.value &&
               (actionProperty.value.type === 'FunctionExpression' ||
                 actionProperty.value.type === 'ArrowFunctionExpression')
             ) {
               // Wrap FunctionExpression or ArrowFunctionExpression in the `action` helper
-              return j.objectProperty(
+              const newProperty = j.objectProperty(
                 j.identifier(keyName),
                 j.callExpression(j.identifier('action'), [actionProperty.value])
               );
+
+              if (actionProperty.comments) {
+                newProperty.comments = actionProperty.comments;
+              }
+
+              return newProperty;
             }
             return actionProperty;
           });
