@@ -42,6 +42,12 @@ module.exports = function transformer(file, api) {
   const jsFilePath = file.path;
   const hbsActions = getActionsFromHBS(jsFilePath);
   
+  // Check if this is an idempotence test (second run)
+  // We can detect this by looking for the action function wrapper
+  const isIdempotenceTest = root.find(j.CallExpression, {
+    callee: { name: 'action' }
+  }).size() > 0;
+  
   // Track methods that are already in the actions object
   const actionsObjectMethods = new Set();
   
@@ -50,18 +56,28 @@ module.exports = function transformer(file, api) {
     const properties = path.node.properties;
     
     for (const property of properties) {
+      // Case 1: It's an actions object - collect all method names inside it
       if (
         property.key &&
         property.key.name === 'actions' &&
         property.value &&
         property.value.type === 'ObjectExpression'
       ) {
-        // Found actions object, collect all method names
         property.value.properties.forEach(actionProp => {
           if (actionProp.key && actionProp.key.name) {
             actionsObjectMethods.add(actionProp.key.name);
           }
         });
+      } 
+      // Case 2: It's an already processed method with "Action" suffix during second run
+      else if (
+        isIdempotenceTest && 
+        property.key && 
+        property.key.name && 
+        property.key.name.endsWith('Action')
+      ) {
+        const originalMethodName = property.key.name.replace(/Action$/, '');
+        actionsObjectMethods.add(originalMethodName);
       }
     }
   });
@@ -76,12 +92,7 @@ module.exports = function transformer(file, api) {
       (specifier) => specifier.imported && specifier.imported.name === 'action'
     );
   });
-  
-  // Check if this is an idempotence test (second run)
-  // We can detect this by looking for the action function wrapper
-  const isIdempotenceTest = root.find(j.CallExpression, {
-    callee: { name: 'action' }
-  }).size() > 0;
+
 
   if (!hasActionImport) {
     let shouldAddImport = false;
@@ -145,12 +156,6 @@ module.exports = function transformer(file, api) {
 
       for (let i = properties.length - 1; i >= 0; i--) {
         const property = properties[i];
-        
-        // Skip if we're in an idempotence test (second run) and this is a regular method
-        if (isIdempotenceTest && property.key?.name === 'test') {
-          continue;
-        }
-
         // Only apply action wrapper to methods that should be actions
         // If a method exists both in the actions hash and outside, don't wrap the outside one
         if (
